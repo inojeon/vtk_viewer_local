@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>three.js webgl - lookup table</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<style>
+		body {
+			color: #000;
+			font-family:Monospace;
+			font-size:13px;
+			text-align:center;
+			font-weight: bold;
+			background-color: #fff;
+			margin: 0px;
+			overflow: hidden;
+		}
+		#info {
+			color:#000;
+			position: absolute;
+			top: 0px; width: 100%;
+			padding: 5px;
+		}
+		a {
+			color: red;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="container"></div>
+	<script src="js/d3.v5.min.js"></script>
+	<script src="js/three.js"></script>
+	<script src="js/Lut.js"></script>
+	<script src="js/WebGL.js"></script>
+	<script src="js/OrbitControls.js"></script>
+	<script src="js/dat.gui.min.js"></script>
+	<script src="js/vtkLoader.js"></script>
+
+	<script>
+		if ( WEBGL.isWebGLAvailable() === false ) {
+			document.body.appendChild( WEBGL.getWebGLErrorMessage() );
+		}
+		var container;
+		var perpCamera, renderer, lut, pointLight, controls, geometry;
+		var mesh, sprite;
+		var scene;
+		var params	= {
+					colorMap: 'RdBu',
+					numberOfColors: 256,
+					name: "",
+					min: -10.0,
+					max: 10.0
+				};
+		var geo, gui;
+		var file
+		//"models/V_2050.vtk",
+    // var fileList = [ "vtk2/V_10.vtk","vtk2/V_20.vtk","vtk2/V_30.vtk","vtk2/V_40.vtk","vtk2/V_50.vtk",
+		// 								"vtk2/V_60.vtk","vtk2/V_70.vtk","vtk2/V_80.vtk","vtk2/V_90.vtk","vtk2/V_100.vtk",];
+		var fileList = ["vtk3/V_100.vtk","vtk3/V_300.vtk","vtk3/V_600.vtk","vtk3/V_1000.vtk","vtk3/V_1200.vtk","vtk3/V_1600.vtk","vtk3/V_1900.vtk",]
+    var fileGUI = {
+      File : fileList[0]
+    }
+		gui = new dat.GUI();
+
+		gui.add(fileGUI, 'File', fileList).onChange(setFileValue);
+		var colormapMenu = gui.addFolder('ColorMap');
+		colormapMenu.add( params, 'colorMap', [ 'RdBu', 'rainbow', 'cooltowarm', 'blackbody', 'grayscale' ] ).onChange( function (d) {
+			params.colorMap = d;
+			setColor();
+			render();
+		} );
+		colormapMenu.add( params, 'max').onChange( function() {
+			setColor();
+			createLegend();
+			render();
+		});
+		colormapMenu.add( params, 'min').onChange( function() {
+			setColor();
+			createLegend();
+			render();
+		});
+		colormapMenu.open();
+
+    function setFileValue (){
+			cleanScene();
+			vtkLoader(fileGUI.File);
+    }
+
+		init();
+
+
+		window.addEventListener( "keydown", function( event ) {
+			switch ( event.keyCode ) {
+				case 81: // q
+					clear();
+					console.log("q");
+					break;
+				case 87: // w
+					init();
+					console.log("w");
+					break;
+			}
+		}, true);
+
+		function clear() {
+			geometry.dispose();
+			scene.dispose();
+			renderer.clear();
+			geometry = undefined;
+			scene = undefined;
+			
+			//remove event
+			window.removeEventListener( 'resize', onWindowResize, false );
+			controls.removeEventListener( 'change', render );
+			d3.select("#legend-svg").remove();	
+		}
+
+		
+		function cleanScene() {
+			var elementsInTheScene = scene.children.length;
+			for (var i = elementsInTheScene - 1; i > 0; i--) {
+					if (scene.children[i].name != 'camera' &&
+							scene.children[i].name != 'ambientLight' &&
+							scene.children[i].name != 'directionalLight') {
+
+							scene.remove(scene.children[i]);
+					}
+			}
+		}
+		function updateColorMapMenu () {
+			for (var i in colormapMenu.__controllers) {
+					colormapMenu.__controllers[i].updateDisplay();
+				}
+		}
+
+
+		function init() {
+
+			if(typeof(container) === "undefined") {
+				container = document.getElementById( "container" );
+			}
+			if(typeof(scene) === "undefined") {
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xffffff );
+			}
+
+			if(typeof(lut) === "undefined") {
+				lut = new THREE.Lut( params.colorMap , params.numberOfColors );
+			}
+
+			if(typeof(dirLight) === "undefined") {
+				// light
+				var dirLight = new THREE.DirectionalLight(0xffffff);
+				dirLight.position.set(200, 200, 1000).normalize();
+			}
+
+			var width = window.innerWidth;
+			var height = window.innerHeight;
+			if(typeof(perpCamera) === "undefined") {
+				perpCamera = new THREE.PerspectiveCamera( 60, width / height, 1, 100 );
+				perpCamera.position.set( 0, 0, 15 );
+				perpCamera.add(dirLight);
+				perpCamera.add(dirLight.target);
+			}
+			if(typeof(pointLight) === "undefined") {
+				pointLight = new THREE.PointLight( 0xffffff, 0.1 );
+				perpCamera.add( pointLight );
+			}
+			scene.add( perpCamera );
+
+			if(typeof(sprite) === "undefined") {
+				sprite = new THREE.Sprite( new THREE.SpriteMaterial( {
+					map: new THREE.CanvasTexture( lut.createCanvas() )
+				} ) );
+				sprite.scale.x = 0.1;
+			}
+			if(typeof(mesh) === "undefined") {	
+				mesh = new THREE.Mesh( undefined, new THREE.MeshLambertMaterial( {
+					side: THREE.DoubleSide,
+					color: 0xF5F5F5,
+					vertexColors: THREE.VertexColors
+				} ) );
+			}
+			scene.add( mesh );
+
+			if(typeof(renderer) === "undefined") {
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.autoClear = false;
+				renderer.setClearColor(0xffffff, 1);
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( width, height );
+				container.appendChild( renderer.domElement );
+			}
+
+			if(typeof(controls) === "undefined") {
+				controls = new THREE.OrbitControls( perpCamera, renderer.domElement );
+			}
+			vtkLoader(fileGUI.File);
+			render();
+
+			window.addEventListener( 'resize', onWindowResize, false );
+			controls.addEventListener( 'change', render );
+		};
+
+		function vtkLoader(fileName) {
+			const loader = new THREE.FileLoader()
+			loader.load(fileName, data => {
+				//step 1 parsing vtk file
+				const parsedData = new VTKLoader(data);
+
+				//step 2 set positions, setIndex
+				geometry = new THREE.BufferGeometry();
+				geometry.setIndex( new THREE.BufferAttribute( new Uint32Array( parsedData.indices ), 1 ) );
+				geometry.addAttribute( 'position' , new THREE.Float32BufferAttribute( parsedData.positions , 3 ));
+				
+				geometry.computeVertexNormals();
+				geometry.normalizeNormals();
+				geometry.center();
+
+				parsedData.pointDatas.forEach(element => {
+					geometry.addAttribute(element.name , new THREE.Float32BufferAttribute( element.point , 1 ));
+				});
+
+				if(params.name == "") {
+					params.name = parsedData.pointDatas[0].name;
+					params.min = parsedData.pointDatas[0].min;
+					params.max = parsedData.pointDatas[0].max;
+				}
+				updateColorMapMenu();
+
+				createLegend();
+
+				setColor();
+				mesh.geometry = geometry;
+				scene.add(mesh);
+				render();
+			});
+		};
+
+		function setColor() {
+			const scalar = geometry.attributes[params.name].array;
+
+			//step 2. set lut color (convert scalar to color)
+			if (typeof geometry.attributes.color === 'undefined') {
+				const colorCount = 3*geometry.attributes.position.count;						
+				geometry.addAttribute( 'color' , new THREE.BufferAttribute( new Float32Array( colorCount, 1 ).fill(1) , 3 ));
+			}
+			const colors = geometry.attributes.color;
+		
+			lut.setColorMap( params.colorMap, params.numberOfColors );
+			//					lut.setMax( 30 ); 	//					lut.setMin( -85 );
+			lut.setMax( params.max );
+			lut.setMin( params.min );
+
+			for (let j = 0; j < scalar.length; j++) {
+				const color = lut.getColor( scalar[j] );
+				colors.setXYZ( j, color.r, color.g, color.b );	
+			}
+			colors.needsUpdate = true;
+			var map = sprite.material.map;
+			lut.updateCanvas( map.image );
+			map.needsUpdate = true;
+		};
+
+		function render() {
+			renderer.clear();
+			renderer.render( scene, perpCamera );
+//			renderer.render( uiScene, orthoCamera );
+		}
+		function onWindowResize() {
+			var width = window.innerWidth;
+			var height = window.innerHeight;
+			perpCamera.aspect = width / height;
+			perpCamera.updateProjectionMatrix();
+			renderer.setSize( width, height );
+			render();
+		}
+
+		
+		function createLegend (){
+			const canvas = "#container";
+			const legendFullHeight = 300;
+			const legendFullWidth = 130;
+			const legendMargin = { top: 20, bottom: 20, left: 20, right: 80 };
+			// use same margins as main plot
+			const legendWidth = legendFullWidth - legendMargin.left - legendMargin.right;
+			const legendHeight = legendFullHeight - legendMargin.top - legendMargin.bottom;
+		
+			if (d3.select("#legend-svg")) {
+				d3.select("#legend-svg").remove();
+			}
+
+			var legendSvg = d3.select(canvas).append("svg")
+												.attr("id","legend-svg")
+												.attr('width', legendFullWidth)
+												.attr('height', legendFullHeight)
+												.style("position", "fixed")
+												.style("bottom","20px")
+												.style("left","20px")
+												.append('g')
+												.attr('transform', 'translate(' + legendMargin.left + ',' +
+												legendMargin.top + ')');
+												
+			var min = params.min;
+			var max = params.max;
+
+			var thresholds = d3.range( min, max, (max - min)/10) ;
+			thresholds.push(max);
+
+      // color scale  
+      var color = d3.scaleSequential(d3.interpolateRdBu)
+										.domain(d3.extent(thresholds).reverse());
+										
+			var colorValue = thresholds.map( d => color(d));
+
+			updateColourScale(colorValue, thresholds);
+
+			// update the colour scale, restyle the plot points and legend
+			function updateColourScale(scale, thresholds) {
+				// create colour scale
+				var colorScale = d3.scaleLinear()
+						.domain(linspace(d3.min(thresholds), d3.max(thresholds), scale.length))
+						.range(scale);
+										
+				// style points
+				d3.selectAll('circle')
+					.attr('fill', function(d) {
+							return colorScale(d.z);
+					});
+
+				// clear current legend
+				legendSvg.selectAll('*').remove();
+
+				// append gradient bar
+				var gradient = legendSvg.append('defs')
+						.append('linearGradient')
+						.attr('id', 'gradient')
+						.attr('x1', '0%') // bottom
+						.attr('y1', '100%')
+						.attr('x2', '0%') // to top
+						.attr('y2', '0%')
+						.attr('spreadMethod', 'pad');
+
+				// programatically generate the gradient for the legend
+				// this creates an array of [pct, colour] pairs as stop
+				// values for legend
+				var pct = linspace(0, 100, scale.length).map(function(d) {
+						return Math.round(d) + '%';
+				});
+
+				var colourPct = d3.zip(pct, scale);
+
+				colourPct.forEach(function(d) {
+						gradient.append('stop')
+								.attr('offset', d[0])
+								.attr('stop-color', d[1])
+								.attr('stop-opacity', 1);
+				});
+
+				legendSvg.append('rect')
+						.attr('x1', 0)
+						.attr('y1', 0)
+						.attr('width', legendWidth)
+						.attr('height', legendHeight)
+						.style('fill', 'url(#gradient)');
+
+				// create a scale and axis for the legend
+				var legendScale = d3.scaleLinear()
+						.domain(d3.extent(thresholds))
+						.range([legendHeight, 0]);
+
+				var legendAxis = d3.axisRight(legendScale)
+						.tickValues(thresholds)
+						.tickFormat(d3.format("f"));
+
+				legendSvg.append("g")
+						.attr("id", "legendAxis")
+						.attr("class", "legend axis")
+						.attr("transform", "translate(" + legendWidth + ", 0)")
+						.call(legendAxis);
+			}
+
+			function linspace(start, end, n) {
+				var out = [];
+				var delta = (end - start) / (n - 1);
+				var i = 0;
+				while(i < (n - 1)) {
+						out.push(start + (i * delta)); i++;
+				}
+				out.push(end);
+				return out;
+			}
+		}
+			
+	</script>
+</body>
+</html>
+
+  
