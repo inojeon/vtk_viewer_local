@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - lookup table</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link rel="stylesheet" type="text/css" href="css/bulma.min.css"/>
+		<link rel="stylesheet" type="text/css" href="css/bulma-tooltip.min.css"/>
+		<link rel="stylesheet" type="text/css" href="/css/all.css"/>
+		<style>
+			body {
+				color: #000;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				font-weight: bold;
+				background-color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				color:#000;
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+			a {
+				color: red;
+			}
+		</style>
+	</head>
+
+	<body>
+		<section class="section">
+			<div class="container">
+				<h1 class="title">
+					Hello World
+				</h1>
+				<p class="subtitle">
+					My first website with <strong>Bulma</strong>!
+				</p>
+			</div>
+		</section>
+		<div id="container"></div>
+
+		<script src="js/three.js"></script>
+		<script src="js/Lut.js"></script>
+		<script src="js/WebGL.js"></script>
+		<script src="js/OrbitControls.js"></script>
+		<script src="js/dat.gui.min.js"></script>
+
+		<script>
+			if ( WEBGL.isWebGLAvailable() === false ) {
+				document.body.appendChild( WEBGL.getWebGLErrorMessage() );
+			}
+			var container;
+			var perpCamera, orthoCamera, renderer, lut;
+			var mesh, sprite;
+			var scene, uiScene;
+			var params;
+
+			class vtkLoader {
+				constructor(height, width) {
+					this.height = height;
+					this.width = width;
+				}
+			}
+
+
+			function vtkLoader() {
+				var loader = new THREE.FileLoader();
+//				loader.load( "vtk2/V_100.vtk" , function ( data ) {
+				loader.load( "models/V_2060.vtk" , function ( data ) {
+					const line = data.split("\n");
+					var dataObj = {positions: [], indices: [], pointDatas:[] };
+
+					for (var i =0; i < line.length; i++) {
+						if (line[i].split(/\s+/)[0].toLowerCase().match(/^points/) ) {
+							const numberOfPoints = parseInt(line[i].split(/\s+/)[1]);
+							i =1+i;
+
+							for (let k = 0; k < numberOfPoints; k++) {
+								const vertices = line[i+k].split(/\s+/);
+								vertices.map( x => 	dataObj.positions.push(parseFloat(x)) ); 
+							}
+							i =i+numberOfPoints;
+							dataObj.numberOfPoints = numberOfPoints;
+						} 
+						if (line[i].split(/\s+/)[0].toLowerCase().match(/^cells/) ) {
+							const numberOfCells = parseInt(line[i].split(/\s+/)[1]);
+							i =1+i;
+							for (let k = 0; k < numberOfCells; k++) {
+								const cellsData = line[i+k].split(/\s+/).map( x => parseInt(x));
+								if ( cellsData[0] >= 3 ) {			// if numVertices is 4, push  0,1,2  0,2,3 
+									for ( var j = 2; j < cellsData[0]; ++ j ) {
+										dataObj.indices.push(cellsData[1], cellsData[j], cellsData[j+1]);
+									}
+								}								
+							}
+							i =i+numberOfCells;
+							dataObj.numberOfCells = numberOfCells;
+							console.log(dataObj.indices);
+						}
+						if (line[i].split(/\s+/)[0].toLowerCase().match(/^cells_types/) ) {
+							const numberOfCellstypes = parseFloat(line[i].split(/\s+/)[1]);
+							i =i+numberOfCellstypes;
+						}
+						if (line[i].split(/\s+/)[0].toLowerCase().match(/^point_data/) ) {
+							const numberOfPointData = parseFloat(line[i].split(/\s+/)[1]);
+							while (i+numberOfPointData < line.length) {
+								const pointData = {};
+								i=i+1;
+								pointData.name = line[i].split(/\s+/)[1];
+								i=i+2;
+								pointData.point = [];
+								for (let k = 0; k < numberOfPointData; k++) {
+									pointData.point.push(parseFloat(line[i+k]));
+								}
+								dataObj.pointDatas.push(pointData);
+								i=i+numberOfPointData-1;
+							}
+						}
+					}
+					console.log("finish");
+				});
+			}
+
+			vtkLoader();
+//			init();
+			function init() {
+				container = document.getElementById( 'container' );
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xffffff );
+				uiScene = new THREE.Scene();
+				lut = new THREE.Lut();
+				var width = window.innerWidth;
+				var height = window.innerHeight;
+				perpCamera = new THREE.PerspectiveCamera( 60, width / height, 1, 100 );
+				perpCamera.position.set( 0, 0, 10 );
+				scene.add( perpCamera );
+				orthoCamera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 1, 2 );
+				orthoCamera.position.set( 0.5, 0, 1 );
+				sprite = new THREE.Sprite( new THREE.SpriteMaterial( {
+					map: new THREE.CanvasTexture( lut.createCanvas() )
+				} ) );
+				sprite.scale.x = 0.125;
+				uiScene.add( sprite );
+				mesh = new THREE.Mesh( undefined, new THREE.MeshLambertMaterial( {
+					side: THREE.DoubleSide,
+					color: 0xF5F5F5,
+					vertexColors: THREE.VertexColors
+				} ) );
+				scene.add( mesh );
+				params	= {
+					colorMap: 'rainbow',
+				};
+				loadModel( );
+
+				var pointLight = new THREE.PointLight( 0xffffff, 1 );
+				perpCamera.add( pointLight );
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.autoClear = false;
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( width, height );
+				container.appendChild( renderer.domElement );
+				window.addEventListener( 'resize', onWindowResize, false );
+				var controls = new THREE.OrbitControls( perpCamera, renderer.domElement );
+				controls.addEventListener( 'change', render );
+				var gui = new dat.GUI();
+				gui.add( params, 'colorMap', [ 'rainbow', 'cooltowarm', 'blackbody', 'grayscale' ] ).onChange( function () {
+					updateColors();
+					render();
+				} );
+			}
+			function onWindowResize() {
+				var width = window.innerWidth;
+				var height = window.innerHeight;
+				perpCamera.aspect = width / height;
+				perpCamera.updateProjectionMatrix();
+				renderer.setSize( width, height );
+				render();
+			}
+			function render() {
+				renderer.clear();
+				renderer.render( scene, perpCamera );
+				renderer.render( uiScene, orthoCamera );
+			}
+			function loadModel( ) {
+				var loader = new THREE.BufferGeometryLoader();
+				loader.load( 'models/pressure.json', function ( geometry ) {
+					geometry.center();
+					geometry.computeVertexNormals();
+					// default color attribute
+					var colors = [];
+					for ( var i = 0, n = geometry.attributes.position.count; i < n; ++ i ) {
+						colors.push( 1, 1, 1 );
+					}
+					geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
+					mesh.geometry = geometry;
+					updateColors();
+					render();
+				} );
+			}
+			function updateColors() {
+				lut.setColorMap( params.colorMap );
+				lut.setMax( 2000 );
+				lut.setMin( 0 );
+				var geometry = mesh.geometry;
+				var pressures = geometry.attributes.pressure;
+				var colors = geometry.attributes.color;
+				for ( var i = 0; i < pressures.array.length; i ++ ) {
+					var colorValue = pressures.array[ i ];
+					var color = lut.getColor( colorValue );
+					if ( color === undefined ) {
+						console.log( 'Unable to determine color for value:', colorValue );
+					} else {
+						colors.setXYZ( i, color.r, color.g, color.b );
+					}
+				}
+				colors.needsUpdate = true;
+				var map = sprite.material.map;
+				lut.updateCanvas( map.image );
+				map.needsUpdate = true;
+			}
+		</script>
+
+	</body>
+  
