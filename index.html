@@ -4,6 +4,7 @@
 	<title>three.js webgl - lookup table</title>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	
 	<link rel="stylesheet" type="text/css" href="css/main.css"/>
 	<link rel="stylesheet" type="text/css" href="css/all.css"/>
 	<style>
@@ -31,11 +32,55 @@
 
 <body>
 	<div>
-	<div id="container" style="z-index:1" ></div>
-	<div id="menu" class="bottommenu">
-		<h1>aaaa</h1>
-	</div>
-
+		<div id="container" style="z-index:1" ></div>
+		
+		<nav class="level bottommenu">
+			<div class="level-item">
+				<p class="control">
+					<a class="button tooltip is-tooltip-bottom" data-tooltip="Start frame" id="step_first">
+						<span class="icon">
+							<i class="fas fa-step-backward"></i>
+						</span>
+					</a>
+				</p>
+				<p class="control">
+					<a class="button tooltip is-tooltip-bottom" data-tooltip="Previous frame" id="step_backward">
+						<span class="icon">
+							<i class="fas fa-angle-left"></i>
+						</span>
+					</a>
+				</p>
+				<p class="control">
+					<a class="button zoomed tooltip is-tooltip-bottom" data-tooltip="Play" id="step_play">
+						<span class="icon">
+							<i class="fas fa-play"></i>
+						</span>
+					</a>
+					<!--
+					<a class="button zoomed tooltip is-tooltip-bottom"  data-tooltip="Play" id='step_stop'>
+						<span class="icon">
+							<i class="fas fa-pause"></i>
+						</span>
+					</a>
+					-->
+				</p>
+				<p class="control">
+					<a class="button zoomed tooltip is-tooltip-bottom" data-tooltip="Next Frame" id="step_forward">
+						<span class="icon">
+							<i class="fas fa-angle-right"></i>
+						</span>
+					</a>
+				</p>
+				<p class="control">
+					<a class="button zoomed tooltip is-tooltip-bottom" data-tooltip="End Frame" id="step_end">
+						<span class="icon">
+							<i class="fas fa-step-forward"></i>
+						</span>
+					</a>
+				</p>
+			</div>
+		</nav>
+		
 	</div>
 	<script src="js/d3.v5.min.js"></script>
 	<script src="js/three.js"></script>
