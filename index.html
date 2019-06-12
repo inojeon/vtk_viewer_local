@@ -348,11 +348,10 @@
 		};
 
 		function vtkLoader(fileName) {
-			if(geoDatas.length == fileGUI.list.length ){
-				geometry = geoDatas.find( (d) => { return d.name == fileName })
-
-				geometry.center();
-				mesh.geometry = geometry;
+			if(geoDatas.length >= fileGUI.list.length ){
+				var geoData  = geoDatas.find( (d) => { return d.name == fileName })
+				
+				mesh.geometry = geoData.geometry;
 				scene.add(mesh);
 				render();
 				
