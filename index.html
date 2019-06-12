@@ -5,28 +5,10 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 	
+	<link rel="stylesheet" type="text/css" href="css/bulma-tooltip.min.css"/>
 	<link rel="stylesheet" type="text/css" href="css/main.css"/>
 	<link rel="stylesheet" type="text/css" href="css/all.css"/>
 	<style>
-		body {
-			color: #000;
-			font-family:Monospace;
-			font-size:13px;
-			text-align:center;
-			font-weight: bold;
-			background-color: #fff;
-			margin: 0px;
-			overflow: hidden;
-		}
-		#info {
-			color:#000;
-			position: absolute;
-			top: 0px; width: 100%;
-			padding: 5px;
-		}
-		a {
-			color: red;
-		}
 	</style>
 </head>
 
@@ -56,13 +38,6 @@
 							<i class="fas fa-play"></i>
 						</span>
 					</a>
-					<!--
-					<a class="button zoomed tooltip is-tooltip-bottom"  data-tooltip="Play" id='step_stop'>
-						<span class="icon">
-							<i class="fas fa-pause"></i>
-						</span>
-					</a>
-					-->
 				</p>
 				<p class="control">
 					<a class="button zoomed tooltip is-tooltip-bottom" data-tooltip="Next Frame" id="step_forward">
@@ -80,7 +55,6 @@
 				</p>
 			</div>
 		</nav>
-		
 	</div>
 	<script src="js/d3.v5.min.js"></script>
 	<script src="js/three.js"></script>
@@ -103,10 +77,10 @@
 					numberOfColors: 256,
 					name: "",
 					min: -10.0,
-					max: 10.0
+					max: 10.0,
+					timeStep : 200
 				};
-		var geo, gui;
-		var file
+		var gui;
 		//"models/V_2050.vtk",
     // var fileList = [ "vtk2/V_10.vtk","vtk2/V_20.vtk","vtk2/V_30.vtk","vtk2/V_40.vtk","vtk2/V_50.vtk",
 		// 								"vtk2/V_60.vtk","vtk2/V_70.vtk","vtk2/V_80.vtk","vtk2/V_90.vtk","vtk2/V_100.vtk",];
@@ -118,13 +92,121 @@
 										"vtk3/V_2200.vtk","vtk3/V_2300.vtk","vtk3/V_2400.vtk","vtk3/V_2500.vtk","vtk3/V_2600.vtk","vtk3/V_2700.vtk","vtk3/V_2800.vtk",
 										"vtk3/V_2900.vtk","vtk3/V_3000.vtk",]
     var fileGUI = {
-      File : fileList[0]
+      File : fileList[0],
+			state : 0,
+			list : fileList
     }
+		var state = {
+			list : fileList,
+		}
+    var pauseFlag = false;
+		var geoDatas = [];
+
+
+		function updateFilename () {
+			for (var i in gui.__controllers) {
+				gui.__controllers[i].updateDisplay();
+			}
+		}
+
+		function chanegeStep(num, fileGUI){
+			var nextstep = fileGUI.state+num; // 0 ~ num frame -1
+			if( nextstep > fileGUI.list.length -1 ){
+				nextstep = 0
+			} else if (nextstep < 0 ) {
+				nextstep = fileGUI.list.length -1
+			} 
+			fileGUI.File = fileList[nextstep]
+			fileGUI.state = nextstep
+
+			updateFilename()
+			cleanScene()
+			vtkLoader(fileGUI.File)
+		}
+
+
+		var id;
+
+		function animate() {
+			id = requestAnimationFrame( animate );
+			if (fileGUI.state == fileGUI.list.length -1){
+				fileGUI.state =-1
+			}
+
+			chanegeStep(1,fileGUI)
+
+			updateFilename()
+			cleanScene()
+			vtkLoader(fileGUI.File)
+		}
+
+
+		document.getElementById('step_backward').addEventListener('click', () => { chanegeStep(-1,fileGUI) });
+		document.getElementById('step_forward').addEventListener('click', nextStep);
+		document.getElementById('step_first').addEventListener('click', goStartStep);
+		document.getElementById('step_end').addEventListener('click', goEndStep);
+		document.getElementById('step_play').addEventListener('click', playStep);
+
+
+		function play(){
+			if (fileGUI.state == fileGUI.list.length -1){
+				fileGUI.state =-1
+			}
+
+			var currentState = fileGUI.state
+			for (let i = 1; i < fileGUI.list.length -currentState; i++) {
+          if(pauseFlag){
+            pauseFlag = false
+            return;
+          }  
+				setTimeout( function timer(){
+          chanegeStep(1,fileGUI) 
+        }, i*params.timeStep )
+			}
+    }
+
+
+		function playStep(){
+      var step = document.getElementById("step_play")
+      if( step.querySelector('i').className == "fas fa-pause" ) {
+        step.querySelector('i').className = "fas fa-play"
+        step.setAttribute('data-tooltip', 'Play');
+        pauseFlag = true;
+      } else if (step.querySelector('i').className == "fas fa-play"){
+        step.setAttribute('data-tooltip', 'Pause');
+        step.querySelector('i').className = "fas fa-pause"
+        pauseFlag = false;
+        play()
+			}
+			console.log(pauseFlag)
+		}
+
+		function nextStep () {
+			chanegeStep(1,fileGUI);
+		}
+		function previousStep () {
+			chanegeStep(-1,fileGUI);
+		}
+		
+		function goStartStep () {
+			chanegeStep(2*fileGUI.list.length,fileGUI);
+		}
+
+		function goEndStep () {
+			chanegeStep(-2*fileGUI.list.length,fileGUI);
+		}
+		
+
+		
+
+
+
 		gui = new dat.GUI();
 
 		gui.add(fileGUI, 'File', fileList).onChange(setFileValue);
-		var colormapMenu = gui.addFolder('ColorMap');
-		colormapMenu.add( params, 'colorMap', [ 'RdBu', 'rainbow', 'cooltowarm', 'blackbody', 'grayscale' ] ).onChange( function (d) {
+		var colormapMenu = gui.addFolder('Setting');
+//		colormapMenu.add( params, 'colorMap', [ 'RdBu', 'rainbow', 'cooltowarm', 'blackbody', 'grayscale' ] ).onChange( function (d) {
+		colormapMenu.add( params, 'colorMap', [ 'RdBu' ] ).onChange( function (d) {
 			params.colorMap = d;
 			setColor();
 			render();
@@ -139,6 +221,7 @@
 			createLegend();
 			render();
 		});
+		colormapMenu.add( params, 'timeStep', 100, 1000);
 		colormapMenu.open();
 
     function setFileValue (){
@@ -147,6 +230,7 @@
     }
 
 		init();
+		vtkLoader(fileGUI.File);
 
 
 		window.addEventListener( "keydown", function( event ) {
@@ -241,6 +325,7 @@
 					vertexColors: THREE.VertexColors
 				} ) );
 			}
+			
 			scene.add( mesh );
 
 			if(typeof(renderer) === "undefined") {
@@ -255,7 +340,7 @@
 			if(typeof(controls) === "undefined") {
 				controls = new THREE.OrbitControls( perpCamera, renderer.domElement );
 			}
-			vtkLoader(fileGUI.File);
+//			vtkLoader(fileGUI.File);
 			render();
 
 			window.addEventListener( 'resize', onWindowResize, false );
@@ -263,38 +348,54 @@
 		};
 
 		function vtkLoader(fileName) {
-			const loader = new THREE.FileLoader()
-			loader.load(fileName, data => {
-				//step 1 parsing vtk file
-				const parsedData = new VTKLoader(data);
+			if(geoDatas.length == fileGUI.list.length ){
+				geometry = geoDatas.find( (d) => { return d.name == fileName })
 
-				//step 2 set positions, setIndex
-				geometry = new THREE.BufferGeometry();
-				geometry.setIndex( new THREE.BufferAttribute( new Uint32Array( parsedData.indices ), 1 ) );
-				geometry.addAttribute( 'position' , new THREE.Float32BufferAttribute( parsedData.positions , 3 ));
-				
-				geometry.computeVertexNormals();
-				geometry.normalizeNormals();
 				geometry.center();
-
-				parsedData.pointDatas.forEach(element => {
-					geometry.addAttribute(element.name , new THREE.Float32BufferAttribute( element.point , 1 ));
-				});
-
-				if(params.name == "") {
-					params.name = parsedData.pointDatas[0].name;
-					params.min = parsedData.pointDatas[0].min;
-					params.max = parsedData.pointDatas[0].max;
-				}
-				updateColorMapMenu();
-
-				createLegend();
-
-				setColor();
 				mesh.geometry = geometry;
 				scene.add(mesh);
 				render();
-			});
+				
+			} else {
+				const loader = new THREE.FileLoader()
+				loader.load(fileName, data => {
+					//step 1 parsing vtk file
+					const parsedData = new VTKLoader(data);
+
+					//step 2 set positions, setIndex
+					geometry = new THREE.BufferGeometry();
+					geometry.setIndex( new THREE.BufferAttribute( new Uint32Array( parsedData.indices ), 1 ) );
+					geometry.addAttribute( 'position' , new THREE.Float32BufferAttribute( parsedData.positions , 3 ));
+					
+					geometry.computeVertexNormals();
+					geometry.normalizeNormals();
+					geometry.center();
+
+					parsedData.pointDatas.forEach(element => {
+						geometry.addAttribute(element.name , new THREE.Float32BufferAttribute( element.point , 1 ));
+					});
+
+					if(params.name == "") {
+						params.name = parsedData.pointDatas[0].name;
+						params.min = parsedData.pointDatas[0].min;
+						params.max = parsedData.pointDatas[0].max;
+					}
+					updateColorMapMenu();
+
+					createLegend();
+
+					setColor();
+					mesh.geometry = geometry;
+					scene.add(mesh);
+					render();
+					var geoData = {};
+					geoData.name = fileName;
+					geoData.geometry = geometry;
+					geoData.pointDatas = parsedData.pointDatas;
+					geoDatas.push(geoData);
+					console.log(geoDatas)
+				});
+			}
 		};
 
 		function setColor() {
