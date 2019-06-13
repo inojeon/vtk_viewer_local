@@ -78,7 +78,7 @@
 					name: "",
 					min: -10.0,
 					max: 10.0,
-					timeStep : 200
+					timeStep : 1000
 				};
 		var gui;
 		//"models/V_2050.vtk",
@@ -102,6 +102,8 @@
     var pauseFlag = false;
 		var geoDatas = [];
 
+		var now;
+		var then = Date.now();
 
 		function updateFilename () {
 			for (var i in gui.__controllers) {
@@ -119,7 +121,7 @@
 			fileGUI.File = fileList[nextstep]
 			fileGUI.state = nextstep
 
-			updateFilename()
+			updateFilename()	//for DAT.GUI
 			cleanScene()
 			vtkLoader(fileGUI.File)
 		}
@@ -129,15 +131,23 @@
 
 		function animate() {
 			id = requestAnimationFrame( animate );
-			if (fileGUI.state == fileGUI.list.length -1){
-				fileGUI.state =-1
+
+			now = Date.now();
+			delta = now - then;
+			
+			if (delta > params.timeStep) {
+				if (fileGUI.state == fileGUI.list.length -1){
+					fileGUI.state =-1
+				}
+				chanegeStep(1,fileGUI)
+
+				updateFilename()
+//				cleanScene()
+//				vtkLoader(fileGUI.File)
+				then = now;
+
+				console.log("delta =" +delta +"now =" +now +"then =" +then )
 			}
-
-			chanegeStep(1,fileGUI)
-
-			updateFilename()
-			cleanScene()
-			vtkLoader(fileGUI.File)
 		}
 
 
@@ -147,38 +157,19 @@
 		document.getElementById('step_end').addEventListener('click', goEndStep);
 		document.getElementById('step_play').addEventListener('click', playStep);
 
-
-		function play(){
-			if (fileGUI.state == fileGUI.list.length -1){
-				fileGUI.state =-1
-			}
-
-			var currentState = fileGUI.state
-			for (let i = 1; i < fileGUI.list.length -currentState; i++) {
-          if(pauseFlag){
-            pauseFlag = false
-            return;
-          }  
-				setTimeout( function timer(){
-          chanegeStep(1,fileGUI) 
-        }, i*params.timeStep )
-			}
-    }
-
-
 		function playStep(){
       var step = document.getElementById("step_play")
       if( step.querySelector('i').className == "fas fa-pause" ) {
         step.querySelector('i').className = "fas fa-play"
         step.setAttribute('data-tooltip', 'Play');
-        pauseFlag = true;
+//        pauseFlag = true;
+				cancelAnimationFrame(id)
       } else if (step.querySelector('i').className == "fas fa-play"){
         step.setAttribute('data-tooltip', 'Pause');
         step.querySelector('i').className = "fas fa-pause"
-        pauseFlag = false;
-        play()
+//        pauseFlag = false;
+        animate()
 			}
-			console.log(pauseFlag)
 		}
 
 		function nextStep () {
@@ -349,11 +340,16 @@
 
 		function vtkLoader(fileName) {
 			if(geoDatas.length >= fileGUI.list.length ){
+				console.log("finish load file")
 				var geoData  = geoDatas.find( (d) => { return d.name == fileName })
-				
-				mesh.geometry = geoData.geometry;
-				scene.add(mesh);
-				render();
+
+				if(typeof(geoData) !== "undefined") {
+					mesh.geometry = geoData.geometry;
+					scene.add(mesh);
+					render();
+				} else {
+					console.log("Load file error" + fileName );
+				}
 				
 			} else {
 				const loader = new THREE.FileLoader()
